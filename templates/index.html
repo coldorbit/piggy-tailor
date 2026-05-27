@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resume Generator - AI Resume Builder</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header class="topbar">
+            <div class="d-flex justify-content-between align-items-center px-3 py-2">
+                <div class="brand"><h2 style="margin:0; font-size:1.25rem;">Resume Generator</h2></div>
+                <div class="nav-actions">
+                    <a href="/profiles" class="nav-link">Manage Profiles</a>
+                </div>
+            </div>
+        </header>
+
+        <nav class="nav-bar">
+            <a href="/profiles" class="nav-link">Manage Profiles</a>
+        </nav>
+
+        <main>
+            <div class="profile-selector-section">
+                <label for="profileSelect">Load Profile:</label>
+                <select id="profileSelect" class="form-select">
+                    <option value="">-- Start Fresh --</option>
+                </select>
+                <div class="form-check" style="display:flex;align-items:center;gap:8px;">
+                    <input class="form-check-input" type="checkbox" id="useProfileCheckbox" />
+                    <label class="form-check-label" for="useProfileCheckbox">Use profile as input</label>
+                </div>
+                <button id="refreshBtn" class="btn btn-sm">Refresh</button>
+                <button id="saveCurrentBtn" class="btn btn-sm">Save to Profile</button>
+            </div>
+
+            <div class="input-section">
+                <div class="form-group">
+                    <p style="font-weight:600; margin-bottom:8px;">Selected Profile Preview:</p>
+                    <div id="profilePreview" class="profile-preview"></div>
+                    <small>Selected profile contents are shown here. Use "Manage Profiles" to edit or create profiles.</small>
+                <small class="hint">Note: Brief profiles (Name, Years, Companies, Education) will be expanded into full, ATS-friendly resumes when generating.</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="jobDescription">Job Description:</label>
+                    <textarea 
+                        id="jobDescription" 
+                        class="form-control"
+                        placeholder="Paste the job description here..." 
+                        rows="12"
+                    ></textarea>
+                    <small>Paste the job posting or description you're applying for</small>
+                </div>
+            </div>
+
+            <div class="button-group">
+                <button id="generateBtn" class="btn btn-primary">Generate Resume</button>
+                <button id="copyBtn" class="btn btn-secondary" style="display:none;">Copy</button>
+                <button id="downloadBtn" class="btn btn-secondary" style="display:none;">Download</button>
+            </div>
+
+            <div id="loading" class="loading" style="display:none;">
+                <div class="spinner"></div>
+                <p>Generating your resume...</p>
+            </div>
+
+            <div id="error" class="error" style="display:none;"></div>
+
+            <div class="output-section" id="outputSection" style="display:none;">
+                <h2>Generated Resume</h2>
+                <div class="output-controls">
+                    <button id="copyBtn2" class="btn btn-sm">Copy</button>
+                    <button id="downloadBtn2" class="btn btn-sm">Download</button>
+                </div>
+                <textarea 
+                    id="generatedResume" 
+                    class="form-control"
+                    readonly 
+                    rows="16"
+                ></textarea>
+            </div>
+        </main>
+
+        <footer>
+            <p>Powered by OpenAI GPT-5-Mini | Make sure to set OPENAI_API_KEY in .env</p>
+        </footer>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios@1.16.1/dist/axios.min.js"></script>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

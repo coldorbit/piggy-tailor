@@ -1,0 +1,182 @@
+cv:
+  name: Jon Zimmerman
+  headline: Senior Data Engineer
+  location: Portland, OR
+  email: jonzimmerman28@outlook.com
+  phone: +1-817-482-6246‬
+  social_networks:
+  - network: LinkedIn
+    username: jon-z-b81834408
+  sections:
+    summary:
+    - 'Senior data engineer with 10 years building production data platforms, pipelines,
+      and retrieval-ready storage for analytics and AI.
+
+      Experienced turning designs into resilient, scalable infrastructure using Python,
+      dbt, Snowflake, Airflow, Terraform, and automated testing.
+
+      Skilled in modeling complex domains, idempotent backfills, schema evolution,
+      and building retrieval-optimized datasets for ML workflows.
+
+      Collaborative leader who drives cross-functional delivery, mentors engineers,
+      and balances rapid experimentation with operational durability.'
+    core_skills:
+    - Python, SQL, dbt, Snowflake, Airflow, Terraform
+    experience:
+    - company: ReefPoint Group
+      position: Senior Data Engineer
+      location: Remote (Portland, OR)
+      tech_stack: Python, Snowflake, dbt, Airflow, Terraform, GitLab, Great Expectations
+      start_date: 2025-08
+      end_date: 2026-04
+      highlights:
+      - Led implementation of Snowflake data warehouse and dbt models, consolidating
+        ten source systems into unified schemas and reducing query latency for analysts
+        across finance and operations.
+      - Built Airflow pipelines and Terraform modules for reproducible deployments,
+        enabling automated CI/CD runs and reducing manual release time across environments
+        by several hours weekly.
+      - Authored comprehensive tests with Great Expectations and unit tests to catch
+        schema drift, preventing production failures and improving data freshness
+        monitoring for over 50 datasets.
+      - Designed idempotent backfill patterns and managed schema evolution strategies
+        to support safe historical repairs and incremental deployments across multi-environment
+        pipelines.
+      - Collaborated with data scientists to produce retrieval-optimized feature tables
+        and metadata schemas, accelerating model training data preparation and reducing
+        ETL preparation time by 6 hours per model.
+      - Delivered observable monitoring dashboards in Grafana and Datadog, instrumenting
+        pipeline SLAs and alerting that cut mean time to detect data incidents from
+        days to hours.
+    - company: Amwell
+      position: Senior Data Engineer
+      location: Remote (Portland, OR)
+      tech_stack: Python, Kafka, Spark, Snowflake, dbt, Airflow, Kubernetes
+      start_date: 2023-05
+      end_date: 2025-06
+      highlights:
+      - Architected streaming and batch ETL pipelines using Kafka, Spark, and Airflow
+        to ingest clinical and telemetry data from over 200 sources into a central
+        Snowflake warehouse.
+      - Optimized Spark jobs and partitioning strategies to reduce nightly ETL runtimes
+        from 9 hours to under 3 hours, enabling next-day analytics and faster reporting
+        cadence.
+      - Led dbt migration to modular models, introduced documentation and tests, and
+        produced reusable marts that served 30 analytics dashboards and multiple product
+        features.
+      - Implemented ML-ready feature stores and prepared high-fidelity training datasets,
+        collaborating with data science to accelerate prototype cycles and improve
+        model reproducibility.
+      - Built Kubernetes-hosted ingestion services with observability and autoscaling,
+        increasing reliability of real-time pipelines and reducing failure recovery
+        time from 3 hours to under 30 minutes.
+      - Defined governance and metadata standards, integrating data catalogs and lineage
+        tools to improve data discoverability and speed analyst onboarding across
+        teams.
+      - Owned production incident response for data systems, performing root cause
+        analysis and restoring service SLAs while reducing recurrence through permanent
+        fixes.
+      - Mentored three data engineers and established coding standards, code review
+        workflows, and documentation practices that improved deployment quality and
+        reduced hotfixes during releases.
+    - company: ArdentMC
+      position: Data Engineer II
+      location: Portland, OR
+      tech_stack: Python, Redshift, dbt, Airflow, Terraform, AWS, SQL
+      start_date: 2021-01
+      end_date: 2023-03
+      highlights:
+      - Designed Redshift schemas and dbt models to consolidate claims and membership
+        data, enabling business users to run complex queries with lower latency and
+        clearer lineage.
+      - Built Airflow DAGs and monitoring to orchestrate nightly ETL, implemented
+        retries and backfill logic to support safe reprocessing of historical batches
+        and reduce failures.
+      - Implemented Terraform modules and CI pipelines for consistent provisioning
+        of data environments, reducing environment setup time from days to hours for
+        analytics teams.
+      - Collaborated with product and analytics teams to define entity models and
+        event histories, producing reusable datasets that powered 12 reporting and
+        analytics products.
+      - Improved data quality by introducing validation rules, automated alerts, and
+        dashboards that reduced data exceptions and increased stakeholder confidence
+        in operational reports.
+    - company: ERPI
+      position: Data Engineer
+      location: Portland, OR
+      tech_stack: Python, SQL Server, SSIS, Airflow, Docker, Jenkins, AWS
+      start_date: 2018-08
+      end_date: 2020-11
+      highlights:
+      - Developed ETL processes using SSIS and Python to consolidate ERP and CRM sources
+        into a centralized SQL Server warehouse for finance and operations reporting.
+      - Built automated report generation and scheduling, delivering monthly and weekly
+        financial packages that shortened report delivery timelines by 3 days for
+        leadership.
+      - Introduced Airflow for orchestration and migrated legacy jobs to containerized
+        Docker workflows, improving maintainability and deployment consistency across
+        environments.
+      - Created documentation, runbooks, and on-call procedures for data pipelines,
+        reducing mean time to resolve incidents and enabling smoother handoffs between
+        teams.
+      - Partnered with stakeholders to translate business requirements into technical
+        designs, producing dimensional models and KPIs used in executive dashboards
+        and board reporting.
+    education:
+    - degree: Master of Arts
+      area: Statistics
+      institution: University of Missouri-Columbia
+      start_date: 2012-09
+      end_date: 2014-09
+    - degree: Bachelor of Science
+      area: Statistics
+      institution: University of Missouri-Columbia
+      start_date: 2008-09
+      end_date: 2012-09
+    skills:
+    - label: Programming Languages
+      details: Python, SQL, Java, Scala, R, Shell, TypeScript, Go
+    - label: Data Platforms
+      details: Snowflake, BigQuery, Redshift, Databricks, PostgreSQL, MySQL, SQL Server,
+        MongoDB
+    - label: Frameworks
+      details: dbt, Apache Spark, Pandas, Scikit-learn, TensorFlow, PySpark, Flask,
+        FastAPI
+    - label: Orchestration / ETL
+      details: Apache Airflow, Prefect, Luigi, Kafka, NiFi, Stitch, Talend, SSIS
+    - label: Cloud Services
+      details: AWS, GCP, Azure, S3, Lambda, GCS, Cloud Functions, EKS
+    - label: DevOps & Infrastructure
+      details: Terraform, Kubernetes, Docker, Git, CI/CD, Jenkins, GitLab, Helm
+    - label: Observability & Testing
+      details: Prometheus, Grafana, Datadog, Sentry, Great Expectations, pytest, ELK
+        Stack, NewRelic
+    - label: Data Modeling & MLOps
+      details: Kimball, Data Vault, Star Schema, Feature Stores, MLflow, TFX, Parquet,
+        Avro
+    - label: Security & Governance
+      details: HIPAA, GDPR, Data Catalogs, AWS KMS, IAM, Lake Formation, Collibra,
+        Apache Ranger
+design:
+  theme: engineeringresumes
+  colors:
+    body: '#262726'
+  page:
+    top_margin: 0.3in
+    bottom_margin: 0.3in
+    left_margin: 0.3in
+    right_margin: 0.3in
+  header:
+    space_below_name: 0.1in
+    space_below_headline: 0.1in
+    space_below_connections: 0.2in
+  templates:
+    experience_entry:
+      main_column: "**POSITION**\n                        **COMPANY** - LOCATION\n\
+        \                        HIGHLIGHTS\n                        ***Tech stack:***\
+        \ TECH_STACK\n                        "
+  typography:
+    bold:
+      headline: 'true'
+    font_size:
+      body: 11pt

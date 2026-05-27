@@ -1,0 +1,22 @@
+services:
+  resume-tailor:
+    image: ${IMAGE:-resume-tailor:local}
+    build: .
+    container_name: resume-tailor
+    ports:
+      - "${HOST_PORT:-5000}:5000"
+    environment:
+      - FLASK_ENV=${FLASK_ENV:-production}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DATABASE_URL=${DATABASE_URL}
+      - DATABASE_SSL=${DATABASE_SSL:-false}
+      - TAILOR_USER_ID=${TAILOR_USER_ID:-1}
+      - MIGRATE_PROFILES_FROM_YAML=${MIGRATE_PROFILES_FROM_YAML:-true}
+      - RESUME_S3_BUCKET=${RESUME_S3_BUCKET:-}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN:-}
+      - PORT=${PORT:-5000}
+    command: gunicorn --bind 0.0.0.0:5000 app:app
+    restart: unless-stopped
