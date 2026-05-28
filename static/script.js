@@ -229,7 +229,7 @@ document.addEventListener('DOMContentLoaded', () => {
             outputSection.scrollIntoView({ behavior: 'smooth' });
 
         } catch (error) {
-            showError(error.message);
+            showError(getErrorMessage(error));
         } finally {
             loadingDiv.style.display = 'none';
             if (generateBtn) generateBtn.disabled = false;
@@ -261,6 +261,10 @@ document.addEventListener('DOMContentLoaded', () => {
     function showError(message) {
         errorDiv.textContent = '❌ ' + message;
         errorDiv.style.display = 'block';
+    }
+
+    function getErrorMessage(error) {
+        return error.response?.data?.error || error.message || 'Unexpected error';
     }
 
     function showSuccess(message) {

@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from dotenv import load_dotenv
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError, NoCredentialsError
@@ -6,6 +6,7 @@ import os
 from openai import APIError, APITimeoutError, OpenAI
 from datetime import datetime
 import json
+from io import BytesIO
 import re
 import subprocess
 import sys
@@ -502,7 +503,8 @@ def upload_resume_to_s3(file_path, s3_key):
         raise RuntimeError(f"Generated PDF is empty at {file_path}")
 
     try:
-        get_s3_client().upload_file(
+        s3_client = get_s3_client()
+        s3_client.upload_file(
             str(file_path),
             RESUME_S3_BUCKET,
             s3_key,
@@ -511,6 +513,14 @@ def upload_resume_to_s3(file_path, s3_key):
                 "ContentDisposition": f'attachment; filename="{Path(s3_key).name}"',
             },
         )
+        uploaded_object = s3_client.head_object(Bucket=RESUME_S3_BUCKET, Key=s3_key)
+        return {
+            "bucket": RESUME_S3_BUCKET,
+            "key": s3_key,
+            "uri": f"s3://{RESUME_S3_BUCKET}/{s3_key}",
+            "size": uploaded_object.get("ContentLength"),
+            "etag": uploaded_object.get("ETag", "").strip('"'),
+        }
     except NoCredentialsError as error:
         raise RuntimeError(
             "AWS credentials were not found. Configure AWS credentials or attach an IAM role with S3 write access."
@@ -631,11 +641,36 @@ def generateDocxFile(generated, profile):
     finally:
         Path("cv.yaml").unlink(missing_ok=True)
 
-    upload_resume_to_s3(output_path, s3_key)
+    upload_result = upload_resume_to_s3(output_path, s3_key)
     output_path.unlink(missing_ok=True)
-    print(f"PDF generated and uploaded to s3://{RESUME_S3_BUCKET}/{s3_key}")
+    print(f"PDF generated and uploaded to {upload_result['uri']}")
 
-    return {"filename": filename, "s3_key": s3_key}
+    return {"filename": filename, "s3_key": s3_key, "s3": upload_result}
+
+
+@app.route("/download/<path:s3_key>", methods=["GET"])
+def download_resume(s3_key):
+    if not RESUME_S3_BUCKET:
+        return jsonify({"error": "AWS S3 bucket is not configured"}), 500
+
+    try:
+        s3_object = get_s3_client().get_object(Bucket=RESUME_S3_BUCKET, Key=s3_key)
+        file_stream = BytesIO(s3_object["Body"].read())
+        file_stream.seek(0)
+        return send_file(
+            file_stream,
+            mimetype=s3_object.get("ContentType") or "application/pdf",
+            as_attachment=True,
+            download_name=Path(s3_key).name,
+        )
+    except ClientError as error:
+        aws_error = error.response.get("Error", {})
+        code = aws_error.get("Code")
+        if code in {"NoSuchKey", "404", "NotFound"}:
+            return jsonify({"error": "Generated resume was not found in S3"}), 404
+        return jsonify({"error": f"S3 download failed: {code or 'Unknown'}"}), 502
+    except BotoCoreError as error:
+        return jsonify({"error": f"S3 download failed: {error}"}), 502
 
 
 @app.route("/api/profiles", methods=["GET"])
@@ -841,6 +876,7 @@ def generate():
                 "filename": resume_file["filename"],
                 "s3Key": resume_file["s3_key"],
                 "s3Bucket": RESUME_S3_BUCKET,
+                "s3": resume_file["s3"],
             }
         )
 
