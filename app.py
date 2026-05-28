@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, render_template, request, jsonify, send_file
 from dotenv import load_dotenv
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError, NoCredentialsError
@@ -22,7 +22,7 @@ from resume_paths import get_resume_output_path
 
 load_dotenv()
 
-app = Flask(__name__, static_folder=None)
+app = Flask(__name__)
 
 gunicorn_logger = logging.getLogger("gunicorn.error")
 if gunicorn_logger.handlers:
@@ -696,6 +696,18 @@ def generateDocxFile(generated, profile):
     app.logger.info("PDF generated and uploaded to %s", upload_result["uri"])
 
     return {"filename": filename, "s3_key": s3_key, "s3": upload_result}
+
+
+@app.route("/")
+def index():
+    """Render the main resume generation page."""
+    return render_template("index.html")
+
+
+@app.route("/profiles")
+def profiles_page():
+    """Render the profiles management page."""
+    return render_template("profiles.html")
 
 
 @app.route("/download/<path:s3_key>", methods=["GET"])
