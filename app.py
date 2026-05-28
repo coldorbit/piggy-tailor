@@ -46,7 +46,6 @@ if not RAW_DATABASE_URL:
     raise ValueError("DATABASE_URL environment variable is not set")
 DATABASE_URL = None
 
-TAILOR_USER_ID = int(os.getenv("TAILOR_USER_ID", "1"))
 MIGRATE_PROFILES_FROM_YAML = (
     os.getenv("MIGRATE_PROFILES_FROM_YAML", "true").lower() == "true"
 )
@@ -98,7 +97,7 @@ def ensure_database():
                 """
                 CREATE TABLE IF NOT EXISTS bid_profiles (
                     id BIGSERIAL PRIMARY KEY,
-                    user_id BIGINT NOT NULL,
+                    user_id BIGINT,
                     name TEXT NOT NULL,
                     location TEXT,
                     phone TEXT,
@@ -125,16 +124,14 @@ def ensure_database():
             cur.execute("ALTER TABLE bid_profiles ADD COLUMN IF NOT EXISTS resume_text TEXT")
             cur.execute("ALTER TABLE bid_profiles ADD COLUMN IF NOT EXISTS color_scheme TEXT NOT NULL DEFAULT 'green'")
             cur.execute("ALTER TABLE bid_profiles ADD COLUMN IF NOT EXISTS profile_badge TEXT NOT NULL DEFAULT 'SWE'")
+            cur.execute("ALTER TABLE bid_profiles ALTER COLUMN user_id DROP NOT NULL")
             cur.execute(
                 """
                 CREATE UNIQUE INDEX IF NOT EXISTS bid_profiles_user_name_lower_idx
                 ON bid_profiles (user_id, lower(name))
                 """
             )
-            cur.execute(
-                "SELECT COUNT(*) AS count FROM bid_profiles WHERE user_id = %s",
-                (TAILOR_USER_ID,),
-            )
+            cur.execute("SELECT COUNT(*) AS count FROM bid_profiles")
             count = cur.fetchone()["count"]
 
         if count == 0 and MIGRATE_PROFILES_FROM_YAML:
@@ -165,12 +162,12 @@ def migrate_profiles_from_yaml(conn):
             cur.execute(
                 """
                 INSERT INTO bid_profiles (
-                    user_id, name, location, phone, email, linkedin,
+                    name, location, phone, email, linkedin,
                     years_of_experience, companies, education,
                     resume_text, color_scheme, profile_badge, created_at, updated_at
                 )
                 VALUES (
-                    %(user_id)s, %(name)s, %(location)s, %(phone)s, %(email)s,
+                    %(name)s, %(location)s, %(phone)s, %(email)s,
                     %(linkedin)s, %(years_of_experience)s, %(companies)s,
                     %(education)s, %(resume_text)s, %(color_scheme)s, %(profile_badge)s,
                     %(created_at)s, %(updated_at)s
@@ -178,7 +175,6 @@ def migrate_profiles_from_yaml(conn):
                 ON CONFLICT DO NOTHING
                 """,
                 {
-                    "user_id": TAILOR_USER_ID,
                     "name": data.get("name", ""),
                     "location": data.get("location", ""),
                     "phone": data.get("phone", ""),
@@ -226,10 +222,8 @@ def get_all_profiles():
                 """
                 SELECT id, name, created_at, updated_at
                 FROM bid_profiles
-                WHERE user_id = %s
                 ORDER BY updated_at DESC
-                """,
-                (TAILOR_USER_ID,),
+                """
             )
             return [
                 {
@@ -248,8 +242,8 @@ def load_profile(profile_id):
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT * FROM bid_profiles WHERE id = %s AND user_id = %s",
-                (profile_id, TAILOR_USER_ID),
+                "SELECT * FROM bid_profiles WHERE id = %s",
+                (profile_id,),
             )
             return serialize_profile(cur.fetchone())
 
@@ -262,17 +256,17 @@ def profile_name_exists(name, profile_id=None):
                 cur.execute(
                     """
                     SELECT 1 FROM bid_profiles
-                    WHERE user_id = %s AND lower(name) = lower(%s)
+                    WHERE lower(name) = lower(%s)
                     """,
-                    (TAILOR_USER_ID, name),
+                    (name,),
                 )
             else:
                 cur.execute(
                     """
                     SELECT 1 FROM bid_profiles
-                    WHERE user_id = %s AND lower(name) = lower(%s) AND id <> %s
+                    WHERE lower(name) = lower(%s) AND id <> %s
                     """,
-                    (TAILOR_USER_ID, name, profile_id),
+                    (name, profile_id),
                 )
             return cur.fetchone() is not None
 
@@ -285,11 +279,11 @@ def create_profile_record(profile_data):
             cur.execute(
                 """
                 INSERT INTO bid_profiles (
-                    user_id, name, location, phone, email, linkedin, years_of_experience,
+                    name, location, phone, email, linkedin, years_of_experience,
                     companies, education, resume_text, color_scheme, profile_badge, created_at, updated_at
                 )
                 VALUES (
-                    %(user_id)s, %(name)s, %(location)s, %(phone)s, %(email)s, %(linkedin)s,
+                    %(name)s, %(location)s, %(phone)s, %(email)s, %(linkedin)s,
                     %(years_of_experience)s, %(companies)s, %(education)s,
                     %(resume_text)s, %(color_scheme)s, %(profile_badge)s, %(created_at)s, %(updated_at)s
                 )
@@ -297,7 +291,6 @@ def create_profile_record(profile_data):
                 """,
                 {
                     **profile_data,
-                    "user_id": TAILOR_USER_ID,
                     "companies": Jsonb(profile_data.get("companies") or []),
                     "education": Jsonb(profile_data.get("education") or []),
                     "color_scheme": profile_data.get("color_scheme") or "green",
@@ -327,12 +320,11 @@ def update_profile_record(profile_id, profile_data):
                     color_scheme = %(color_scheme)s,
                     profile_badge = %(profile_badge)s,
                     updated_at = %(updated_at)s
-                WHERE id = %(id)s AND user_id = %(user_id)s
+                WHERE id = %(id)s
                 """,
                 {
                     **profile_data,
                     "id": profile_id,
-                    "user_id": TAILOR_USER_ID,
                     "companies": Jsonb(profile_data.get("companies") or []),
                     "education": Jsonb(profile_data.get("education") or []),
                     "color_scheme": profile_data.get("color_scheme") or "green",
@@ -348,8 +340,8 @@ def delete_profile_record(profile_id):
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "DELETE FROM bid_profiles WHERE id = %s AND user_id = %s",
-                (profile_id, TAILOR_USER_ID),
+                "DELETE FROM bid_profiles WHERE id = %s",
+                (profile_id,),
             )
             return cur.rowcount > 0
 

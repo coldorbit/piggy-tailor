@@ -19,7 +19,6 @@ The app stores profiles in the shared `bid_profiles` PostgreSQL table used by th
 ```bash
 DATABASE_URL=postgres://USER:PASSWORD@HOST:5432/DATABASE
 DATABASE_SSL=true
-TAILOR_USER_ID=1
 ```
 
 ### 2. Install Dependencies
@@ -42,7 +41,6 @@ Edit `.env` and add your OpenAI API key:
 OPENAI_API_KEY=sk-your-api-key-here
 DATABASE_URL=postgres://USER:PASSWORD@HOST:5432/DATABASE
 DATABASE_SSL=true
-TAILOR_USER_ID=1
 MIGRATE_PROFILES_FROM_YAML=true
 RESUME_S3_BUCKET=your-resume-bucket
 AWS_REGION=us-east-1
@@ -149,7 +147,7 @@ The response includes the generated JSON plus S3 metadata:
 
 ## Data Storage
 
-Profiles are stored in the shared `bid_profiles` PostgreSQL table and scoped to `TAILOR_USER_ID`. On first startup, if that user has no bid profiles and `MIGRATE_PROFILES_FROM_YAML=true`, existing `profiles/profile_*.yaml` files are imported automatically.
+Profiles are stored in the shared `bid_profiles` PostgreSQL table. On first startup, if the table has no profiles and `MIGRATE_PROFILES_FROM_YAML=true`, existing `profiles/profile_*.yaml` files are imported automatically.
 
 RenderCV still receives a temporary YAML file when generating a PDF because that is the format its CLI expects; the app no longer stores profile data in YAML files.
 
