@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 import boto3
 from botocore.exceptions import ClientError
 import os
-from openai import OpenAI
+from openai import APIError, APITimeoutError, OpenAI
 from datetime import datetime
 from io import BytesIO
 import json
@@ -28,7 +28,8 @@ api_key = os.getenv("OPENAI_API_KEY")
 if not api_key:
     raise ValueError("OPENAI_API_KEY environment variable is not set")
 
-client = OpenAI(api_key=api_key)
+OPENAI_TIMEOUT_SECONDS = float(os.getenv("OPENAI_TIMEOUT_SECONDS", "150"))
+client = OpenAI(api_key=api_key, timeout=OPENAI_TIMEOUT_SECONDS)
 
 # Existing YAML files are only used for one-time migration into PostgreSQL.
 PROFILES_DIR = Path("profiles")
@@ -863,6 +864,10 @@ def generate():
             }
         )
 
+    except APITimeoutError:
+        return jsonify({"error": "OpenAI request timed out. Please try again."}), 504
+    except APIError as e:
+        return jsonify({"error": f"OpenAI request failed: {str(e)}"}), 502
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
