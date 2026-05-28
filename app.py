@@ -1,16 +1,14 @@
-from flask import Flask, render_template, request, jsonify, send_file
+from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 import boto3
-from botocore.exceptions import ClientError
+from botocore.exceptions import BotoCoreError, ClientError, NoCredentialsError
 import os
 from openai import APIError, APITimeoutError, OpenAI
 from datetime import datetime
-from io import BytesIO
 import json
 import re
 import subprocess
 import sys
-import tempfile
 import yaml
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -22,7 +20,7 @@ from resume_paths import get_resume_output_path
 
 load_dotenv()
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder=None)
 
 api_key = os.getenv("OPENAI_API_KEY")
 if not api_key:
@@ -483,42 +481,51 @@ def build_resume_s3_key(profile, generated_data, extension):
     return f"{profile_folder}/{date_folder}/{filename}", filename
 
 
+def get_s3_client():
+    region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION")
+    kwargs = {}
+    if region:
+        kwargs["region_name"] = region
+    return boto3.client("s3", **kwargs)
+
+
 def upload_resume_to_s3(file_path, s3_key):
     if not RESUME_S3_BUCKET:
         raise RuntimeError(
             "AWS S3 bucket is not configured. Set RESUME_S3_BUCKET, AWS_S3_BUCKET_NAME, or S3_BUCKET_NAME."
         )
 
-    boto3.client(
-        "s3",
-        region_name=os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION"),
-    ).upload_file(
-        str(file_path),
-        RESUME_S3_BUCKET,
-        s3_key,
-        ExtraArgs={"ContentType": "application/pdf"},
-    )
-
-
-def download_resume_from_s3(s3_key):
-    if not RESUME_S3_BUCKET:
-        return None
+    file_path = Path(file_path)
+    if not file_path.exists():
+        raise FileNotFoundError(f"Generated PDF was not found at {file_path}")
+    if file_path.stat().st_size == 0:
+        raise RuntimeError(f"Generated PDF is empty at {file_path}")
 
     try:
-        response = boto3.client(
-            "s3",
-            region_name=os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION"),
-        ).get_object(
-            Bucket=RESUME_S3_BUCKET,
-            Key=s3_key,
+        get_s3_client().upload_file(
+            str(file_path),
+            RESUME_S3_BUCKET,
+            s3_key,
+            ExtraArgs={
+                "ContentType": "application/pdf",
+                "ContentDisposition": f'attachment; filename="{Path(s3_key).name}"',
+            },
         )
+    except NoCredentialsError as error:
+        raise RuntimeError(
+            "AWS credentials were not found. Configure AWS credentials or attach an IAM role with S3 write access."
+        ) from error
     except ClientError as error:
-        code = str(error.response.get("Error", {}).get("Code", ""))
-        if code in {"NoSuchKey", "404", "NotFound"}:
-            return None
-        raise
-
-    return BytesIO(response["Body"].read())
+        aws_error = error.response.get("Error", {})
+        code = aws_error.get("Code", "Unknown")
+        message = aws_error.get("Message", str(error))
+        raise RuntimeError(
+            f"S3 upload failed for s3://{RESUME_S3_BUCKET}/{s3_key}: {code}: {message}"
+        ) from error
+    except BotoCoreError as error:
+        raise RuntimeError(
+            f"S3 upload failed for s3://{RESUME_S3_BUCKET}/{s3_key}: {error}"
+        ) from error
 
 
 def generateDocxFile(generated, profile):
@@ -625,37 +632,10 @@ def generateDocxFile(generated, profile):
         Path("cv.yaml").unlink(missing_ok=True)
 
     upload_resume_to_s3(output_path, s3_key)
-    print(f"PDF generated at {output_path} and uploaded to s3://{RESUME_S3_BUCKET}/{s3_key}")
+    output_path.unlink(missing_ok=True)
+    print(f"PDF generated and uploaded to s3://{RESUME_S3_BUCKET}/{s3_key}")
 
     return {"filename": filename, "s3_key": s3_key}
-
-
-@app.route("/")
-def index():
-    """Render the main resume generation page"""
-    return render_template("index.html")
-
-
-@app.route("/download/<path:s3_key>")
-def download(s3_key):
-    print("down called with s3_key:", s3_key)
-    """Serve the generated PDF file from S3 for download"""
-    s3_file = download_resume_from_s3(s3_key)
-    if s3_file:
-        return send_file(
-            s3_file,
-            as_attachment=True,
-            download_name=Path(s3_key).name,
-            mimetype="application/pdf",
-        )
-
-    return "File not found", 404
-
-
-@app.route("/profiles")
-def profiles_page():
-    """Render the profiles management page"""
-    return render_template("profiles.html")
 
 
 @app.route("/api/profiles", methods=["GET"])
