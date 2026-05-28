@@ -19,5 +19,5 @@ services:
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
       - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN:-}
       - PORT=${PORT:-5000}
-    command: gunicorn --bind 0.0.0.0:5000 --timeout ${GUNICORN_TIMEOUT:-180} app:app
+    command: gunicorn --bind 0.0.0.0:5000 --timeout ${GUNICORN_TIMEOUT:-180} --log-level ${LOG_LEVEL:-info} --access-logfile - --error-logfile - --capture-output app:app
     restart: unless-stopped

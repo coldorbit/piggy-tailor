@@ -7,6 +7,7 @@ from openai import APIError, APITimeoutError, OpenAI
 from datetime import datetime
 import json
 from io import BytesIO
+import logging
 import re
 import subprocess
 import sys
@@ -22,6 +23,14 @@ from resume_paths import get_resume_output_path
 load_dotenv()
 
 app = Flask(__name__, static_folder=None)
+
+gunicorn_logger = logging.getLogger("gunicorn.error")
+if gunicorn_logger.handlers:
+    app.logger.handlers = gunicorn_logger.handlers
+    app.logger.setLevel(gunicorn_logger.level)
+else:
+    logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
+    app.logger.setLevel(os.getenv("LOG_LEVEL", "INFO"))
 
 api_key = os.getenv("OPENAI_API_KEY")
 if not api_key:
@@ -490,6 +499,13 @@ def get_s3_client():
     return boto3.client("s3", **kwargs)
 
 
+def get_aws_credential_source(s3_client):
+    credentials = s3_client._request_signer._credentials
+    if not credentials:
+        return "none"
+    return getattr(credentials, "method", "unknown")
+
+
 def upload_resume_to_s3(file_path, s3_key):
     if not RESUME_S3_BUCKET:
         raise RuntimeError(
@@ -504,6 +520,15 @@ def upload_resume_to_s3(file_path, s3_key):
 
     try:
         s3_client = get_s3_client()
+        app.logger.info(
+            "Starting resume S3 upload: bucket=%s key=%s region=%s credential_source=%s file=%s size=%s",
+            RESUME_S3_BUCKET,
+            s3_key,
+            s3_client.meta.region_name,
+            get_aws_credential_source(s3_client),
+            file_path,
+            file_path.stat().st_size,
+        )
         s3_client.upload_file(
             str(file_path),
             RESUME_S3_BUCKET,
@@ -514,14 +539,27 @@ def upload_resume_to_s3(file_path, s3_key):
             },
         )
         uploaded_object = s3_client.head_object(Bucket=RESUME_S3_BUCKET, Key=s3_key)
-        return {
+        upload_result = {
             "bucket": RESUME_S3_BUCKET,
             "key": s3_key,
             "uri": f"s3://{RESUME_S3_BUCKET}/{s3_key}",
             "size": uploaded_object.get("ContentLength"),
             "etag": uploaded_object.get("ETag", "").strip('"'),
         }
+        app.logger.info(
+            "Verified resume S3 upload: bucket=%s key=%s size=%s etag=%s",
+            RESUME_S3_BUCKET,
+            s3_key,
+            upload_result["size"],
+            upload_result["etag"],
+        )
+        return upload_result
     except NoCredentialsError as error:
+        app.logger.exception(
+            "Resume S3 upload failed without AWS credentials: bucket=%s key=%s",
+            RESUME_S3_BUCKET,
+            s3_key,
+        )
         raise RuntimeError(
             "AWS credentials were not found. Configure AWS credentials or attach an IAM role with S3 write access."
         ) from error
@@ -529,10 +567,22 @@ def upload_resume_to_s3(file_path, s3_key):
         aws_error = error.response.get("Error", {})
         code = aws_error.get("Code", "Unknown")
         message = aws_error.get("Message", str(error))
+        app.logger.exception(
+            "Resume S3 upload failed with AWS ClientError: bucket=%s key=%s code=%s message=%s",
+            RESUME_S3_BUCKET,
+            s3_key,
+            code,
+            message,
+        )
         raise RuntimeError(
             f"S3 upload failed for s3://{RESUME_S3_BUCKET}/{s3_key}: {code}: {message}"
         ) from error
     except BotoCoreError as error:
+        app.logger.exception(
+            "Resume S3 upload failed with BotoCoreError: bucket=%s key=%s",
+            RESUME_S3_BUCKET,
+            s3_key,
+        )
         raise RuntimeError(
             f"S3 upload failed for s3://{RESUME_S3_BUCKET}/{s3_key}: {error}"
         ) from error
@@ -643,7 +693,7 @@ def generateDocxFile(generated, profile):
 
     upload_result = upload_resume_to_s3(output_path, s3_key)
     output_path.unlink(missing_ok=True)
-    print(f"PDF generated and uploaded to {upload_result['uri']}")
+    app.logger.info("PDF generated and uploaded to %s", upload_result["uri"])
 
     return {"filename": filename, "s3_key": s3_key, "s3": upload_result}
 
@@ -881,10 +931,13 @@ def generate():
         )
 
     except APITimeoutError:
+        app.logger.exception("OpenAI request timed out while generating resume")
         return jsonify({"error": "OpenAI request timed out. Please try again."}), 504
     except APIError as e:
+        app.logger.exception("OpenAI request failed while generating resume")
         return jsonify({"error": f"OpenAI request failed: {str(e)}"}), 502
     except Exception as e:
+        app.logger.exception("Resume generation request failed")
         return jsonify({"error": str(e)}), 500
 
 
