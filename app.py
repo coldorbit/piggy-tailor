@@ -53,15 +53,24 @@ def get_db_connection():
     return psycopg.connect(DATABASE_URL, row_factory=dict_row)
 
 
+def database_ssl_enabled():
+    value = os.getenv("DATABASE_SSL", "false").strip().lower()
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"0", "false", "no", "off", ""}:
+        return False
+    raise ValueError("DATABASE_SSL must be true or false")
+
+
 def normalize_database_url(value):
     parsed = urlsplit(value)
     query = {
         key: val
         for key, val in parse_qsl(parsed.query, keep_blank_values=True)
-        if key.lower() != "pgbouncer"
+        if key.lower() not in {"pgbouncer", "sslmode"}
     }
-    if os.getenv("DATABASE_SSL", "false").lower() == "true":
-        query.setdefault("sslmode", "require")
+    if database_ssl_enabled():
+        query["sslmode"] = "require"
     return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, urlencode(query), parsed.fragment))
 
 
