@@ -131,6 +131,49 @@ def ensure_database():
                 ON bid_profiles (user_id, lower(name))
                 """
             )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS tailored_resumes (
+                    id BIGSERIAL PRIMARY KEY,
+                    user_id BIGINT,
+                    profile_id BIGINT,
+                    job_url TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'ready',
+                    file_path TEXT,
+                    ready_at TIMESTAMPTZ,
+                    attempts INTEGER NOT NULL DEFAULT 0,
+                    max_attempts INTEGER NOT NULL DEFAULT 3,
+                    last_error TEXT,
+                    dead_letter_at TIMESTAMPTZ,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                )
+                """
+            )
+            cur.execute("ALTER TABLE tailored_resumes ADD COLUMN IF NOT EXISTS user_id BIGINT")
+            cur.execute("ALTER TABLE tailored_resumes ADD COLUMN IF NOT EXISTS profile_id BIGINT")
+            cur.execute("ALTER TABLE tailored_resumes ADD COLUMN IF NOT EXISTS job_url TEXT")
+            cur.execute("ALTER TABLE tailored_resumes ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'ready'")
+            cur.execute("ALTER TABLE tailored_resumes ADD COLUMN IF NOT EXISTS file_path TEXT")
+            cur.execute("ALTER TABLE tailored_resumes ADD COLUMN IF NOT EXISTS ready_at TIMESTAMPTZ")
+            cur.execute("ALTER TABLE tailored_resumes ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 0")
+            cur.execute("ALTER TABLE tailored_resumes ADD COLUMN IF NOT EXISTS max_attempts INTEGER NOT NULL DEFAULT 3")
+            cur.execute("ALTER TABLE tailored_resumes ADD COLUMN IF NOT EXISTS last_error TEXT")
+            cur.execute("ALTER TABLE tailored_resumes ADD COLUMN IF NOT EXISTS dead_letter_at TIMESTAMPTZ")
+            cur.execute("ALTER TABLE tailored_resumes ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now()")
+            cur.execute("ALTER TABLE tailored_resumes ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now()")
+            cur.execute(
+                """
+                CREATE INDEX IF NOT EXISTS tailored_resumes_profile_job_status_idx
+                ON tailored_resumes (profile_id, job_url, status)
+                """
+            )
+            cur.execute(
+                """
+                CREATE INDEX IF NOT EXISTS tailored_resumes_profile_status_job_idx
+                ON tailored_resumes (profile_id, status, job_url)
+                """
+            )
             cur.execute("SELECT COUNT(*) AS count FROM bid_profiles")
             count = cur.fetchone()["count"]
 
@@ -344,6 +387,122 @@ def delete_profile_record(profile_id):
                 (profile_id,),
             )
             return cur.rowcount > 0
+
+
+def parse_optional_int(value):
+    if value in (None, ""):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def mark_tailored_resume_ready(metadata, resume_file):
+    """Persist generated resume storage details for the web API download flow."""
+    metadata = metadata or {}
+    profile = metadata.get("profile") or {}
+    tailored_resume_id = parse_optional_int(metadata.get("tailoredResumeId"))
+    profile_id = parse_optional_int(metadata.get("profileId") or profile.get("id"))
+    user_id = parse_optional_int(metadata.get("userId"))
+    job_url = str(metadata.get("jobUrl") or "").strip()
+    file_path = resume_file["s3_key"]
+
+    if not tailored_resume_id and not (profile_id and job_url):
+        return None
+
+    ensure_database()
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            if tailored_resume_id:
+                cur.execute(
+                    """
+                    INSERT INTO tailored_resumes (
+                        id, user_id, profile_id, job_url, status, file_path,
+                        ready_at, attempts, max_attempts, last_error,
+                        dead_letter_at, created_at, updated_at
+                    )
+                    VALUES (
+                        %(id)s, %(user_id)s, %(profile_id)s, %(insert_job_url)s,
+                        'ready', %(file_path)s, now(), 0, 3, NULL, NULL, now(), now()
+                    )
+                    ON CONFLICT (id) DO UPDATE
+                    SET user_id = COALESCE(EXCLUDED.user_id, tailored_resumes.user_id),
+                        profile_id = COALESCE(EXCLUDED.profile_id, tailored_resumes.profile_id),
+                        job_url = CASE
+                            WHEN %(job_url)s <> '' THEN %(job_url)s
+                            ELSE tailored_resumes.job_url
+                        END,
+                        status = 'ready',
+                        file_path = EXCLUDED.file_path,
+                        ready_at = now(),
+                        last_error = NULL,
+                        dead_letter_at = NULL,
+                        updated_at = now()
+                    RETURNING id
+                    """,
+                    {
+                        "id": tailored_resume_id,
+                        "user_id": user_id,
+                        "profile_id": profile_id,
+                        "job_url": job_url,
+                        "insert_job_url": job_url or "manual",
+                        "file_path": file_path,
+                    },
+                )
+                return cur.fetchone()["id"]
+
+            cur.execute(
+                """
+                UPDATE tailored_resumes
+                SET user_id = COALESCE(%(user_id)s, user_id),
+                    status = 'ready',
+                    file_path = %(file_path)s,
+                    ready_at = now(),
+                    last_error = NULL,
+                    dead_letter_at = NULL,
+                    updated_at = now()
+                WHERE id = (
+                    SELECT id
+                    FROM tailored_resumes
+                    WHERE profile_id = %(profile_id)s
+                      AND job_url = %(job_url)s
+                    ORDER BY updated_at DESC
+                    LIMIT 1
+                )
+                RETURNING id
+                """,
+                {
+                    "user_id": user_id,
+                    "profile_id": profile_id,
+                    "job_url": job_url,
+                    "file_path": file_path,
+                },
+            )
+            row = cur.fetchone()
+            if row:
+                return row["id"]
+
+            cur.execute(
+                """
+                INSERT INTO tailored_resumes (
+                    user_id, profile_id, job_url, status, file_path,
+                    ready_at, attempts, max_attempts, created_at, updated_at
+                )
+                VALUES (
+                    %(user_id)s, %(profile_id)s, %(job_url)s, 'ready',
+                    %(file_path)s, now(), 0, 3, now(), now()
+                )
+                RETURNING id
+                """,
+                {
+                    "user_id": user_id,
+                    "profile_id": profile_id,
+                    "job_url": job_url,
+                    "file_path": file_path,
+                },
+            )
+            return cur.fetchone()["id"]
 
 
 def generate_resume(job_description=None, profile_resume=None):
@@ -923,16 +1082,19 @@ def generate():
 
         # generate docx file with json
         resume_file = generateDocxFile(generated, data.get("profile", {}))
+        tailored_resume_id = mark_tailored_resume_ready(data, resume_file)
 
-        return jsonify(
-            {
-                "generatedResume": generated,
-                "filename": resume_file["filename"],
-                "s3Key": resume_file["s3_key"],
-                "s3Bucket": RESUME_S3_BUCKET,
-                "s3": resume_file["s3"],
-            }
-        )
+        response = {
+            "generatedResume": generated,
+            "filename": resume_file["filename"],
+            "s3Key": resume_file["s3_key"],
+            "s3Bucket": RESUME_S3_BUCKET,
+            "s3": resume_file["s3"],
+        }
+        if tailored_resume_id:
+            response["tailoredResumeId"] = tailored_resume_id
+
+        return jsonify(response)
 
     except APITimeoutError:
         app.logger.exception("OpenAI request timed out while generating resume")
