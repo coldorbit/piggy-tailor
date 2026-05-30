@@ -552,7 +552,7 @@ def generate_resume(job_description=None, profile_resume=None):
     - Keep language ATS-friendly and professional and grammatically perfect.
     - Name field should be a combination company name in JD and the role and randome number upto 300(no repeat for 50 times)(e.g., "Apple AI Engineer 208" ).
     - Set target_company to the company from the job description. If the company is unavailable, use "Company".
-    - Set the top-level "role" field (used as the resume headline/title) to the existing title from the last company in the profile. Do not rewrite it to match the job description.
+    - Set the top-level "role" field (used as the resume headline/title) to the existing title from the latest company in the profile. Do not rewrite it to match the job description.
     - **Output ONLY valid JSON**. Do NOT include any extra text, markdown, or explanations.
     - The JSON must match this exact skeleton:
     {{
