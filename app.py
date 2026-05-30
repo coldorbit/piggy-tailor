@@ -799,6 +799,7 @@ def generateDocxFile(generated, profile):
                 "bottom_margin": "0.3in",
                 "left_margin": "0.3in",
                 "right_margin": "0.3in",
+                "show_last_updated_date": False
             },
             "header": {
                 "space_below_name": "0.1in",
