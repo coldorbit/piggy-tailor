@@ -518,14 +518,15 @@ def generate_resume(job_description=None, profile_resume=None):
     infer_note = ""
     if profile_resume and profile_resume.strip():
         # If the profile is very short (e.g., only name, years, companies, education), ask the model to infer realistic
-        # role titles, responsibilities, and achievement bullets using those seeds.
+        # responsibilities and achievement bullets using those seeds.
         profile_len = len(profile_resume.strip())
         minimal_profile = profile_len < 400
         if minimal_profile:
             infer_note = (
                 "The provided profile is brief (likely only name, years of experience, companies, and education). "
-                "Infer reasonable professional details for a senior software engineer based on these seeds: role titles, "
-                "timeframes, measurable achievements, and technologies. Do not invent unverifiable company facts; keep achievements plausible and aligned with the job description.\n\n"
+                "Infer reasonable professional details for a senior software engineer based on these seeds: "
+                "timeframes, measurable achievements, and technologies. Do not infer or rewrite role titles. "
+                "Do not invent unverifiable company facts; keep achievements plausible and aligned with the job description.\n\n"
             )
 
         prompt_body = f"Profile:\n{profile_resume}\n\nJob Description:\n{job_description or 'N/A'}"
