@@ -553,6 +553,11 @@ def generate_resume(job_description=None, profile_resume=None):
     - Name field should be a combination company name in JD and the role and randome number upto 300(no repeat for 50 times)(e.g., "Apple AI Engineer 208" ).
     - Set target_company to the company from the job description. If the company is unavailable, use "Company".
     - Set the top-level "role" field (used as the resume headline/title) to the existing title from the latest company in the profile. Do not rewrite it to match the job description.
+    - Keep each company's real industry/domain: never invent or change it.
+    - Include domain-specific terms only if the company truly belongs to that industry.
+    - If the JD asks for a different industry, do not fabricate experience.
+    - Tailor bullets using relevant skills, tools, architecture, and impact while keeping the original domain.
+    - Align with skills/technologies, not by changing industry context.
     - **Output ONLY valid JSON**. Do NOT include any extra text, markdown, or explanations.
     - The JSON must match this exact skeleton:
     {{
