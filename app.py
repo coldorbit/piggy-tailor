@@ -539,8 +539,9 @@ def generate_resume(job_description=None, profile_resume=None):
 
     Instructions:
     - If a full resume/profile is provided, base the output on that content.
-    - If only a minimal profile is provided (name, years, companies, education), infer plausible role titles, durations, accomplishments (with metrics when reasonable), and technologies that fit the candidate level and companies listed.
+    - If only a minimal profile is provided (name, years, companies, education), infer durations, accomplishments (with metrics when reasonable), and technologies that fit the candidate level and companies listed.
     - Produce experience entries for each company in the profile(company name, dates, and achievement bullets of 20-30 words each)
+    - Do not modify existing role titles/positions for companies in the profile; preserve the provided title for each company exactly when available.
     - If the experience in the company is between 2-4, use 8 bullets, if 0-2, use 6 bullets for each comapny. If the company is the third or fourth one, use 5 bullets.
     - Avoid '%' through bullets as possible(1-2 is OK per company), include metrics like counts, quantities, time reductions, performance, speed, accuracy, or financial impact - to demonstrate measurable results and technical contribution. 
     - Include a single-string "tech" field per experience and an overall "skills_and_tools" string.
@@ -550,7 +551,7 @@ def generate_resume(job_description=None, profile_resume=None):
     - Keep language ATS-friendly and professional and grammatically perfect.
     - Name field should be a combination company name in JD and the role and randome number upto 300(no repeat for 50 times)(e.g., "Apple AI Engineer 208" ).
     - Set target_company to the company from the job description. If the company is unavailable, use "Company".
-    - Choose the role wisely based on the job description and profile content, ideally matching a title from the profile if possible, but ensuring it aligns well with the job description.
+    - Set the top-level "role" field (used as the resume headline/title) to the existing title from the last company in the profile. Do not rewrite it to match the job description.
     - **Output ONLY valid JSON**. Do NOT include any extra text, markdown, or explanations.
     - The JSON must match this exact skeleton:
     {{
