@@ -526,7 +526,7 @@ def generate_resume(job_description=None, profile_resume=None):
                 "The provided profile is brief (likely only name, years of experience, companies, and education). "
                 "Infer reasonable professional details for a senior software engineer based on these seeds: "
                 "timeframes, measurable achievements, and technologies. Do not infer or rewrite role titles. "
-                "Do not invent unverifiable company facts; keep achievements plausible and aligned with the job description.\n\n"
+                "Do not invent unverifiable company facts; role or position titles, keep achievements plausible and aligned with the job description.\n\n"
             )
 
         prompt_body = f"Profile:\n{profile_resume}\n\nJob Description:\n{job_description or 'N/A'}"
@@ -542,7 +542,7 @@ def generate_resume(job_description=None, profile_resume=None):
     - If a full resume/profile is provided, base the output on that content.
     - If only a minimal profile is provided (name, years, companies, education), infer durations, accomplishments (with metrics when reasonable), and technologies that fit the candidate level and companies listed.
     - Produce experience entries for each company in the profile(company name, dates, and achievement bullets of 20-30 words each)
-    - Do not modify existing role titles/positions for companies in the profile; preserve the provided title for each company exactly when available.
+    - Never ever modify existing role titles/positions for companies in the profile; preserve the provided title for each company exactly when available.
     - If the experience in the company is between 2-4, use 8 bullets, if 0-2, use 6 bullets for each comapny. If the company is the third or fourth one, use 5 bullets.
     - Avoid '%' through bullets as possible(1-2 is OK per company), include metrics like counts, quantities, time reductions, performance, speed, accuracy, or financial impact - to demonstrate measurable results and technical contribution. 
     - Include a single-string "tech" field per experience and an overall "skills_and_tools" string.
