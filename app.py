@@ -544,6 +544,7 @@ def generate_resume(job_description=None, profile_resume=None):
     - Produce experience entries for each company in the profile(company name, dates, and achievement bullets of 20-30 words each)
     - Never ever modify existing role titles/positions for companies in the profile; preserve the provided title for each company exactly when available.
     - If the experience in the company is between 2-4, use 8 bullets, if 0-2, use 6 bullets for each comapny. If the company is the third or fourth one, use 5 bullets.
+    - If 3 companies: use 8, 6, 8 bullets respectively; if 4 companies: use 8, 6, 5, 5 bullets respectively. And experience must be aligned with company's domain.
     - Avoid '%' through bullets as possible(1-2 is OK per company), include metrics like counts, quantities, time reductions, performance, speed, accuracy, or financial impact - to demonstrate measurable results and technical contribution. 
     - Include a single-string "tech" field per experience and an overall "skills_and_tools" string.
     - Select 6 exact core skills like frameworks or tools or languages that are 85% relevant to the job description.(ex. Python, React, Agile, Docker...)
