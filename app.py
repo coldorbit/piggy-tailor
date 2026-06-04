@@ -11,6 +11,7 @@ import logging
 import re
 import subprocess
 import sys
+import tempfile
 import time
 import yaml
 from pathlib import Path
@@ -884,20 +885,31 @@ def generateDocxFile(generated, profile):
     output_path = get_resume_output_path(s3_key)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    yaml_start = time.perf_counter()
-    yaml.safe_dump(
-        cv,  # your AI JSON
-        stream=Path("cv.yaml").open("w", encoding="utf-8"),
-        sort_keys=False,
-        default_flow_style=False,
-        allow_unicode=True,
-    )
-    app.logger.info(
-        "resume_timing stage=write_rendercv_yaml elapsed_ms=%s",
-        elapsed_ms(yaml_start),
-    )
+    cv_yaml_path = None
 
     try:
+        yaml_start = time.perf_counter()
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            suffix=".yaml",
+            prefix="cv_",
+            delete=False,
+        ) as cv_yaml_file:
+            cv_yaml_path = Path(cv_yaml_file.name)
+            yaml.safe_dump(
+                cv,  # your AI JSON
+                stream=cv_yaml_file,
+                sort_keys=False,
+                default_flow_style=False,
+                allow_unicode=True,
+            )
+        app.logger.info(
+            "resume_timing stage=write_rendercv_yaml elapsed_ms=%s path=%s",
+            elapsed_ms(yaml_start),
+            cv_yaml_path,
+        )
+
         render_start = time.perf_counter()
         subprocess.run(
             [
@@ -905,7 +917,7 @@ def generateDocxFile(generated, profile):
                 "-m",
                 "rendercv",
                 "render",
-                str("cv.yaml"),
+                str(cv_yaml_path),
                 "-pdf",
                 str(output_path),
             ],
@@ -918,7 +930,8 @@ def generateDocxFile(generated, profile):
             output_path.stat().st_size if output_path.exists() else 0,
         )
     finally:
-        Path("cv.yaml").unlink(missing_ok=True)
+        if cv_yaml_path:
+            cv_yaml_path.unlink(missing_ok=True)
 
     upload_result = upload_resume_to_s3(output_path, s3_key)
     output_path.unlink(missing_ok=True)
