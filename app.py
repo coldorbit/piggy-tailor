@@ -11,6 +11,7 @@ import logging
 import re
 import subprocess
 import sys
+import time
 import yaml
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -55,6 +56,10 @@ RESUME_S3_BUCKET = (
     or os.getenv("S3_BUCKET_NAME")
 )
 DB_INITIALIZED = False
+
+
+def elapsed_ms(start_time):
+    return round((time.perf_counter() - start_time) * 1000, 1)
 
 
 def get_db_connection():
@@ -400,6 +405,7 @@ def parse_optional_int(value):
 
 def mark_tailored_resume_ready(metadata, resume_file):
     """Persist generated resume storage details for the web API download flow."""
+    stage_start = time.perf_counter()
     metadata = metadata or {}
     profile = metadata.get("profile") or {}
     tailored_resume_id = parse_optional_int(metadata.get("tailoredResumeId"))
@@ -409,104 +415,133 @@ def mark_tailored_resume_ready(metadata, resume_file):
     file_path = resume_file["s3_key"]
 
     if not tailored_resume_id and not (profile_id and job_url):
+        app.logger.info(
+            "resume_timing stage=db_mark_skipped elapsed_ms=%s",
+            elapsed_ms(stage_start),
+        )
         return None
 
-    ensure_database()
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            if tailored_resume_id:
+    try:
+        ensure_database()
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                if tailored_resume_id:
+                    cur.execute(
+                        """
+                        INSERT INTO tailored_resumes (
+                            id, user_id, profile_id, job_url, status, file_path,
+                            ready_at, attempts, max_attempts, last_error,
+                            dead_letter_at, created_at, updated_at
+                        )
+                        VALUES (
+                            %(id)s, %(user_id)s, %(profile_id)s, %(insert_job_url)s,
+                            'ready', %(file_path)s, now(), 0, 3, NULL, NULL, now(), now()
+                        )
+                        ON CONFLICT (id) DO UPDATE
+                        SET user_id = COALESCE(EXCLUDED.user_id, tailored_resumes.user_id),
+                            profile_id = COALESCE(EXCLUDED.profile_id, tailored_resumes.profile_id),
+                            job_url = CASE
+                                WHEN %(job_url)s <> '' THEN %(job_url)s
+                                ELSE tailored_resumes.job_url
+                            END,
+                            status = 'ready',
+                            file_path = EXCLUDED.file_path,
+                            ready_at = now(),
+                            last_error = NULL,
+                            dead_letter_at = NULL,
+                            updated_at = now()
+                        RETURNING id
+                        """,
+                        {
+                            "id": tailored_resume_id,
+                            "user_id": user_id,
+                            "profile_id": profile_id,
+                            "job_url": job_url,
+                            "insert_job_url": job_url or "manual",
+                            "file_path": file_path,
+                        },
+                    )
+                    result_id = cur.fetchone()["id"]
+                    app.logger.info(
+                        "resume_timing stage=db_mark elapsed_ms=%s result_id=%s mode=upsert_by_id",
+                        elapsed_ms(stage_start),
+                        result_id,
+                    )
+                    return result_id
+
                 cur.execute(
                     """
-                    INSERT INTO tailored_resumes (
-                        id, user_id, profile_id, job_url, status, file_path,
-                        ready_at, attempts, max_attempts, last_error,
-                        dead_letter_at, created_at, updated_at
-                    )
-                    VALUES (
-                        %(id)s, %(user_id)s, %(profile_id)s, %(insert_job_url)s,
-                        'ready', %(file_path)s, now(), 0, 3, NULL, NULL, now(), now()
-                    )
-                    ON CONFLICT (id) DO UPDATE
-                    SET user_id = COALESCE(EXCLUDED.user_id, tailored_resumes.user_id),
-                        profile_id = COALESCE(EXCLUDED.profile_id, tailored_resumes.profile_id),
-                        job_url = CASE
-                            WHEN %(job_url)s <> '' THEN %(job_url)s
-                            ELSE tailored_resumes.job_url
-                        END,
+                    UPDATE tailored_resumes
+                    SET user_id = COALESCE(%(user_id)s, user_id),
                         status = 'ready',
-                        file_path = EXCLUDED.file_path,
+                        file_path = %(file_path)s,
                         ready_at = now(),
                         last_error = NULL,
                         dead_letter_at = NULL,
                         updated_at = now()
+                    WHERE id = (
+                        SELECT id
+                        FROM tailored_resumes
+                        WHERE profile_id = %(profile_id)s
+                          AND job_url = %(job_url)s
+                        ORDER BY updated_at DESC
+                        LIMIT 1
+                    )
                     RETURNING id
                     """,
                     {
-                        "id": tailored_resume_id,
                         "user_id": user_id,
                         "profile_id": profile_id,
                         "job_url": job_url,
-                        "insert_job_url": job_url or "manual",
                         "file_path": file_path,
                     },
                 )
-                return cur.fetchone()["id"]
+                row = cur.fetchone()
+                if row:
+                    app.logger.info(
+                        "resume_timing stage=db_mark elapsed_ms=%s result_id=%s mode=update_existing",
+                        elapsed_ms(stage_start),
+                        row["id"],
+                    )
+                    return row["id"]
 
-            cur.execute(
-                """
-                UPDATE tailored_resumes
-                SET user_id = COALESCE(%(user_id)s, user_id),
-                    status = 'ready',
-                    file_path = %(file_path)s,
-                    ready_at = now(),
-                    last_error = NULL,
-                    dead_letter_at = NULL,
-                    updated_at = now()
-                WHERE id = (
-                    SELECT id
-                    FROM tailored_resumes
-                    WHERE profile_id = %(profile_id)s
-                      AND job_url = %(job_url)s
-                    ORDER BY updated_at DESC
-                    LIMIT 1
+                cur.execute(
+                    """
+                    INSERT INTO tailored_resumes (
+                        user_id, profile_id, job_url, status, file_path,
+                        ready_at, attempts, max_attempts, created_at, updated_at
+                    )
+                    VALUES (
+                        %(user_id)s, %(profile_id)s, %(job_url)s, 'ready',
+                        %(file_path)s, now(), 0, 3, now(), now()
+                    )
+                    RETURNING id
+                    """,
+                    {
+                        "user_id": user_id,
+                        "profile_id": profile_id,
+                        "job_url": job_url,
+                        "file_path": file_path,
+                    },
                 )
-                RETURNING id
-                """,
-                {
-                    "user_id": user_id,
-                    "profile_id": profile_id,
-                    "job_url": job_url,
-                    "file_path": file_path,
-                },
-            )
-            row = cur.fetchone()
-            if row:
-                return row["id"]
-
-            cur.execute(
-                """
-                INSERT INTO tailored_resumes (
-                    user_id, profile_id, job_url, status, file_path,
-                    ready_at, attempts, max_attempts, created_at, updated_at
+                result_id = cur.fetchone()["id"]
+                app.logger.info(
+                    "resume_timing stage=db_mark elapsed_ms=%s result_id=%s mode=insert",
+                    elapsed_ms(stage_start),
+                    result_id,
                 )
-                VALUES (
-                    %(user_id)s, %(profile_id)s, %(job_url)s, 'ready',
-                    %(file_path)s, now(), 0, 3, now(), now()
-                )
-                RETURNING id
-                """,
-                {
-                    "user_id": user_id,
-                    "profile_id": profile_id,
-                    "job_url": job_url,
-                    "file_path": file_path,
-                },
-            )
-            return cur.fetchone()["id"]
+                return result_id
+    except Exception:
+        app.logger.exception(
+            "resume_timing stage=db_mark_failed elapsed_ms=%s",
+            elapsed_ms(stage_start),
+        )
+        raise
 
 
 def generate_resume(job_description=None, profile_resume=None):
     """Use OpenAI to generate a resume based on job description and optional profile resume"""
+    stage_start = time.perf_counter()
 
     # At least one input must be provided
     if (not job_description or not str(job_description).strip()) and (
@@ -595,9 +630,13 @@ def generate_resume(job_description=None, profile_resume=None):
     }}
     """
 
-    response = client.responses.create(
-        model="gpt-5-mini", input=prompt
+    app.logger.info(
+        "resume_timing stage=openai_start prompt_chars=%s job_description_chars=%s profile_resume_chars=%s",
+        len(prompt),
+        len(str(job_description or "")),
+        len(str(profile_resume or "")),
     )
+    response = client.responses.create(model="gpt-5-mini", input=prompt)
 
     output_text = ""
     for item in response.output:
@@ -606,6 +645,11 @@ def generate_resume(job_description=None, profile_resume=None):
                 if content.type == "output_text":
                     output_text += content.text
 
+    app.logger.info(
+        "resume_timing stage=openai elapsed_ms=%s output_chars=%s",
+        elapsed_ms(stage_start),
+        len(output_text),
+    )
     return output_text
 
 
@@ -666,6 +710,7 @@ def get_aws_credential_source(s3_client):
 
 
 def upload_resume_to_s3(file_path, s3_key):
+    stage_start = time.perf_counter()
     if not RESUME_S3_BUCKET:
         raise RuntimeError(
             "AWS S3 bucket is not configured. Set RESUME_S3_BUCKET, AWS_S3_BUCKET_NAME, or S3_BUCKET_NAME."
@@ -712,6 +757,11 @@ def upload_resume_to_s3(file_path, s3_key):
             upload_result["size"],
             upload_result["etag"],
         )
+        app.logger.info(
+            "resume_timing stage=s3_upload elapsed_ms=%s size=%s",
+            elapsed_ms(stage_start),
+            upload_result["size"],
+        )
         return upload_result
     except NoCredentialsError as error:
         app.logger.exception(
@@ -748,7 +798,14 @@ def upload_resume_to_s3(file_path, s3_key):
 
 
 def generateDocxFile(generated, profile):
+    stage_start = time.perf_counter()
+    parse_start = time.perf_counter()
     data = json.loads(generated)
+    app.logger.info(
+        "resume_timing stage=parse_generated_json elapsed_ms=%s generated_chars=%s",
+        elapsed_ms(parse_start),
+        len(generated),
+    )
 
     cv = {
         "cv": {
@@ -827,6 +884,7 @@ def generateDocxFile(generated, profile):
     output_path = get_resume_output_path(s3_key)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
+    yaml_start = time.perf_counter()
     yaml.safe_dump(
         cv,  # your AI JSON
         stream=Path("cv.yaml").open("w", encoding="utf-8"),
@@ -834,8 +892,13 @@ def generateDocxFile(generated, profile):
         default_flow_style=False,
         allow_unicode=True,
     )
+    app.logger.info(
+        "resume_timing stage=write_rendercv_yaml elapsed_ms=%s",
+        elapsed_ms(yaml_start),
+    )
 
     try:
+        render_start = time.perf_counter()
         subprocess.run(
             [
                 sys.executable,
@@ -848,12 +911,23 @@ def generateDocxFile(generated, profile):
             ],
             check=True,
         )
+        app.logger.info(
+            "resume_timing stage=rendercv elapsed_ms=%s output_path=%s output_size=%s",
+            elapsed_ms(render_start),
+            output_path,
+            output_path.stat().st_size if output_path.exists() else 0,
+        )
     finally:
         Path("cv.yaml").unlink(missing_ok=True)
 
     upload_result = upload_resume_to_s3(output_path, s3_key)
     output_path.unlink(missing_ok=True)
     app.logger.info("PDF generated and uploaded to %s", upload_result["uri"])
+    app.logger.info(
+        "resume_timing stage=pdf_and_upload_total elapsed_ms=%s filename=%s",
+        elapsed_ms(stage_start),
+        filename,
+    )
 
     return {"filename": filename, "s3_key": s3_key, "s3": upload_result}
 
@@ -872,6 +946,7 @@ def profiles_page():
 
 @app.route("/download/<path:s3_key>", methods=["GET"])
 def download_resume(s3_key):
+    request_start = time.perf_counter()
     if not RESUME_S3_BUCKET:
         return jsonify({"error": "AWS S3 bucket is not configured"}), 500
 
@@ -879,6 +954,12 @@ def download_resume(s3_key):
         s3_object = get_s3_client().get_object(Bucket=RESUME_S3_BUCKET, Key=s3_key)
         file_stream = BytesIO(s3_object["Body"].read())
         file_stream.seek(0)
+        app.logger.info(
+            "resume_timing stage=s3_download elapsed_ms=%s key=%s size=%s",
+            elapsed_ms(request_start),
+            s3_key,
+            len(file_stream.getbuffer()),
+        )
         return send_file(
             file_stream,
             mimetype=s3_object.get("ContentType") or "application/pdf",
@@ -1077,21 +1158,43 @@ def delete_profile(profile_id):
 
 @app.route("/api/generate", methods=["POST"])
 def generate():
+    request_start = time.perf_counter()
     try:
         data = request.json
         job_desc = data.get("jobDescription", "")
         profile_resume = data.get("profileResume", "")
+        app.logger.info(
+            "resume_timing stage=generate_request_start job_description_chars=%s profile_resume_chars=%s has_profile=%s",
+            len(str(job_desc or "")),
+            len(str(profile_resume or "")),
+            bool(data.get("profile")),
+        )
 
         if not job_desc:
             return jsonify({"error": "Missing job description"}), 400
 
+        stage_start = time.perf_counter()
         generated = generate_resume(
             job_desc, profile_resume if profile_resume else None
         )
+        app.logger.info(
+            "resume_timing stage=generate_resume_total elapsed_ms=%s",
+            elapsed_ms(stage_start),
+        )
 
         # generate docx file with json
+        stage_start = time.perf_counter()
         resume_file = generateDocxFile(generated, data.get("profile", {}))
+        app.logger.info(
+            "resume_timing stage=generate_file_total elapsed_ms=%s",
+            elapsed_ms(stage_start),
+        )
+        stage_start = time.perf_counter()
         tailored_resume_id = mark_tailored_resume_ready(data, resume_file)
+        app.logger.info(
+            "resume_timing stage=mark_ready_total elapsed_ms=%s",
+            elapsed_ms(stage_start),
+        )
 
         response = {
             "generatedResume": generated,
@@ -1103,16 +1206,30 @@ def generate():
         if tailored_resume_id:
             response["tailoredResumeId"] = tailored_resume_id
 
+        app.logger.info(
+            "resume_timing stage=generate_request_complete elapsed_ms=%s filename=%s",
+            elapsed_ms(request_start),
+            resume_file["filename"],
+        )
         return jsonify(response)
 
     except APITimeoutError:
-        app.logger.exception("OpenAI request timed out while generating resume")
+        app.logger.exception(
+            "OpenAI request timed out while generating resume elapsed_ms=%s",
+            elapsed_ms(request_start),
+        )
         return jsonify({"error": "OpenAI request timed out. Please try again."}), 504
     except APIError as e:
-        app.logger.exception("OpenAI request failed while generating resume")
+        app.logger.exception(
+            "OpenAI request failed while generating resume elapsed_ms=%s",
+            elapsed_ms(request_start),
+        )
         return jsonify({"error": f"OpenAI request failed: {str(e)}"}), 502
     except Exception as e:
-        app.logger.exception("Resume generation request failed")
+        app.logger.exception(
+            "Resume generation request failed elapsed_ms=%s",
+            elapsed_ms(request_start),
+        )
         return jsonify({"error": str(e)}), 500
 
 
