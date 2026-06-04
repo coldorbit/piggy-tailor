@@ -86,14 +86,14 @@ jobs:
 
             mkdir -p "$APP_DIR"
 
-      - name: Copy compose file to EC2
+      - name: Copy compose files to EC2
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           port: ${{ secrets.EC2_PORT || 22 }}
-          source: docker-compose.yml
+          source: docker-compose.yml,docker-compose.balanced.yml,nginx-load-balancer.conf
           target: ${{ env.APP_DIR }}
 
       - name: Deploy over SSH
@@ -136,6 +136,8 @@ jobs:
               echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
             fi
 
-            IMAGE="$IMAGE" $COMPOSE pull resume-tailor
-            IMAGE="$IMAGE" $COMPOSE up -d --no-build --remove-orphans resume-tailor
+            IMAGE="$IMAGE" $COMPOSE -f docker-compose.balanced.yml config >/dev/null
+            IMAGE="$IMAGE" $COMPOSE -f docker-compose.balanced.yml pull resume-tailor-key-1 resume-tailor-key-2 resume-tailor-lb
+            IMAGE="$IMAGE" $COMPOSE -f docker-compose.yml down --remove-orphans || true
+            IMAGE="$IMAGE" $COMPOSE -f docker-compose.balanced.yml up -d --no-build --remove-orphans
             docker image prune -f

@@ -67,7 +67,37 @@ cp .env.example .env
 docker compose up --build -d
 ```
 
-For EC2 deployment, install Docker and Docker Compose on the instance, then create `/opt/tailor/.env` from `.env.example` and fill in the real secrets. The GitHub Actions workflow copies `docker-compose.yml` to that directory, pulls the GHCR image built for the current commit, and restarts the `resume-tailor` service.
+### Balanced two-key mode
+
+To run two app containers with different OpenAI API keys behind an Nginx round-robin load balancer, set both keys in `.env`:
+
+```dotenv
+OPENAI_API_KEY_1=sk-first-key
+OPENAI_API_KEY_2=sk-second-key
+```
+
+Then start the balanced stack:
+
+```bash
+make balanced-up
+```
+
+The load balancer listens on `HOST_PORT` (default `5000`) and distributes requests between `resume-tailor-key-1` and `resume-tailor-key-2`. Follow timing logs with:
+
+```bash
+make balanced-logs
+```
+
+If both OpenAI keys belong to the same project or organization, they may still share the same OpenAI rate limits. This setup guarantees even routing across containers; it does not bypass shared provider-side limits.
+
+For EC2 deployment, install Docker and Docker Compose on the instance, then create `/opt/tailor/.env` from `.env.example` and fill in the real secrets. The GitHub Actions workflow copies the Compose and Nginx files to that directory, pulls the GHCR image built for the current commit, and restarts the balanced stack.
+
+Production `.env` must include both balanced OpenAI keys:
+
+```dotenv
+OPENAI_API_KEY_1=sk-first-key
+OPENAI_API_KEY_2=sk-second-key
+```
 
 Configure these GitHub repository secrets:
 

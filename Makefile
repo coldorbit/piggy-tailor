@@ -6,7 +6,7 @@ LOCAL_PORT ?= 5000
 
 .DEFAULT_GOAL := help
 
-.PHONY: help run up down restart rebuild wait logs ps db shell local install clean
+.PHONY: help run up down restart rebuild balanced-up balanced-down balanced-logs balanced-ps wait logs ps db shell local install clean
 
 help:
 	@echo "ResumeTailor commands"
@@ -16,6 +16,10 @@ help:
 	@echo "  make down     Stop the Docker Compose app stack"
 	@echo "  make restart  Restart the app container"
 	@echo "  make rebuild  Rebuild the app image and restart the stack"
+	@echo "  make balanced-up    Start two app containers behind Nginx round-robin"
+	@echo "  make balanced-down  Stop the balanced stack"
+	@echo "  make balanced-logs  Follow balanced app and load balancer logs"
+	@echo "  make balanced-ps    Show balanced stack containers"
 	@echo "  make logs     Follow app logs"
 	@echo "  make ps       Show container status"
 	@echo "  make db       Open a psql shell in the PostgreSQL container"
@@ -49,6 +53,22 @@ rebuild:
 	@$(MAKE) wait
 	@echo ""
 	@echo "ResumeTailor rebuilt and running at $(APP_URL)"
+
+balanced-up:
+	$(COMPOSE) down
+	$(COMPOSE) -f docker-compose.balanced.yml up --build -d
+	@$(MAKE) wait
+	@echo ""
+	@echo "ResumeTailor balanced stack is running at $(APP_URL)"
+
+balanced-down:
+	$(COMPOSE) -f docker-compose.balanced.yml down
+
+balanced-logs:
+	$(COMPOSE) -f docker-compose.balanced.yml logs -f resume-tailor-key-1 resume-tailor-key-2 resume-tailor-lb
+
+balanced-ps:
+	$(COMPOSE) -f docker-compose.balanced.yml ps
 
 wait:
 	@for attempt in {1..30}; do \
